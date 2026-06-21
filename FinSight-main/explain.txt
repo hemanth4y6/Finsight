@@ -1,0 +1,90 @@
+FinSight Project Summary
+
+1. What FinSight does
+FinSight is a Flask + React application for explainable financial risk analysis. The backend accepts financial transaction CSV data, computes risk signals, scores the user as Individual or SME, detects anomalies, builds a short forecast, and returns both structured results and explanation text. The frontend lets the user upload data, view results, and read explanations.
+
+2. How the financial scoring logic works
+FinSight computes core monthly signals from grouped transaction data:
+- average income, average expenses, average debt payments
+- income volatility = monthly income standard deviation / monthly income mean
+- expense volatility = monthly expense standard deviation / monthly expense mean
+- burn_rate = expense trend - income trend
+- obligation_ratio = average debt / average income
+- cash_reserve_strength = (average income - average expense - average debt) / average income
+
+For individuals it also computes:
+- discretionary_ratio = discretionary expense / total expense
+- fixed_cost_ratio = fixed expense / average income
+
+For SMEs it also computes:
+- operating_leverage = fixed expense / average income
+- growth_ratio = growth expense / average income
+- debt_coverage = (average income - average expense) / average debt
+
+The final risk score is a 5-factor weighted score scaled to 0-100:
+- income_volatility
+- expense_volatility
+- obligation_ratio
+- cash_reserve_weakness
+- spending_anomaly_score
+
+The code normalizes each factor to 0-1, multiplies by the weight profile, sums the weighted values, and multiplies by 100. Cash reserve weakness is computed by inverting cash reserve strength. Individual and SME use different weights.
+
+Stress timeline / runway:
+- monthly_net = average income - average expense - average debt
+- if monthly_net is negative, monthly_deficit = -monthly_net
+- buffer = average income * 2
+- runway months = buffer / monthly_deficit
+- discretionary-cut simulation compares old runway vs new runway after reducing the deficit by the cut amount
+
+Forecasting:
+- uses linear regression for future income and expenses
+- balance = income - expenses
+- also computes a 3-month moving average
+
+3. How Smart Compliance Copilot works
+Smart Compliance Copilot is integrated into the same Flask backend under:
+- GET /smart-compliance/
+- POST /smart-compliance/process
+- POST /smart-compliance/download-report
+
+Processing flow:
+- uploaded files are saved to a temporary folder
+- PDFs are read with PyMuPDF
+- non-PDF text files are read as text
+- text is split into numbered clauses when possible
+- each clause is analyzed with spaCy token/lemma checks
+
+Clause classification in code:
+- High: obligation words plus consequence words
+- Medium: obligation words or conditional words
+- Low: otherwise informational/descriptive
+
+The module then:
+- creates a summary count of High / Medium / Low clauses
+- renders a pie chart with matplotlib
+- returns clause-level analysis plus a base64 chart image
+
+Report generation:
+- reportlab creates a PDF report
+- the PDF includes the summary, a table of clauses and reasons, and the chart image when present
+
+4. Major libraries used
+- Flask: backend web server and API routes
+- flask-cors: cross-origin access for the frontend
+- pandas / numpy: transaction aggregation and numeric calculations
+- scikit-learn: linear regression for forecasting
+- spaCy: clause tokenization / lemma-based compliance rule checks
+- PyMuPDF (fitz): PDF text extraction
+- reportlab: PDF report generation
+- matplotlib: compliance risk pie chart generation
+- React: frontend UI
+- react-router-dom: frontend page routing
+
+5. Simple workflows
+Financial workflow:
+user CSV input -> signal computation -> anomaly detection + weighted scoring + forecast -> explanation output
+
+Compliance workflow:
+document upload or pasted text -> text extraction / clause split -> spaCy-based clause analysis -> summary + chart -> PDF report generation
+
